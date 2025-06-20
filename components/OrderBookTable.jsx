@@ -368,51 +368,327 @@
 // };
 
 // export default OrderBookTable;
+
+// /////////=================================/////////
+// 'use client';
+
+// import React, { useState, useEffect, useRef } from 'react';
+// import { RefreshCw } from 'lucide-react';
+// import { Client } from '@stomp/stompjs';
+// import SockJS from 'sockjs-client';
+
+// // const SYMBOL_PRICE_RANGES = {
+// //   AAPL: [150.0, 200.0],
+// //   GOOGL: [2000.0, 2500.0],
+// //   MSFT: [200.0, 400.0],
+// //   AMZN: [3000.0, 3500.0],
+// //   TSLA: [200.0, 300.0],
+// // };
+
+// const OrderBookTable = ({ selectedSymbol }) => {
+//   const [orderBook, setOrderBook] = useState([]);
+//   const [isLoading, setIsLoading] = useState(false);
+//   const [error, setError] = useState(null);
+//   const wsRef = useRef(null);
+//   const orderBookData = useRef({});
+
+//   useEffect(() => {
+//     if (selectedSymbol) {
+//       orderBookData.current = {};
+//       setOrderBook([]);
+//       setError(null);
+//       connectWebSocket();
+//     } else {
+//       if (wsRef.current) {
+//         wsRef.current.deactivate();
+//       }
+//       setOrderBook([]);
+//     }
+
+//     return () => {
+//       if (wsRef.current) {
+//         wsRef.current.deactivate();
+//       }
+//     };
+//   }, [selectedSymbol]);
+
+//   const connectWebSocket = () => {
+//     if (wsRef.current) {
+//       wsRef.current.deactivate();
+//     }
+
+//     setIsLoading(true);
+//     setError(null);
+
+//     const socketUrl = process.env.NEXT_PUBLIC_BACKEND_URL + "/ws/careEcho";
+
+//     const client = new Client({
+//       brokerURL: undefined,
+//       webSocketFactory: () => new SockJS(socketUrl),
+//       reconnectDelay: 5000,
+//       debug: (msg) => console.log('[STOMP DEBUG]', msg),
+//       onConnect: () => {
+//         console.log('Connected to WebSocket via STOMP');
+//         setIsLoading(false); // ✅ Set loading to false when connected
+
+//         client.subscribe('/topic/top5', (message) => {
+//           try {
+//             console.log("Raw message body:", message.body);
+//             const msg = JSON.parse(message.body);
+//             console.log("Parsed message:", msg);
+            
+//             const symbolDataList = msg.data;
+
+//             if (!symbolDataList || !Array.isArray(symbolDataList)) {
+//               console.warn("Invalid symbolDataList:", symbolDataList);
+//               return;
+//             }
+
+//             symbolDataList.forEach((symbolData) => {
+//               // ✅ Handle both string and object symbol formats
+//               const symbolName = typeof symbolData.symbol === 'string' 
+//                 ? symbolData.symbol 
+//                 : symbolData.symbol?.name;
+//               console.log("Processing symbol:", symbolName, "Selected:", selectedSymbol);
+              
+//               if (symbolName === selectedSymbol) {
+//                 let buyOrders = symbolData.buy || [];
+//                 let sellOrders = symbolData.sell || [];
+
+//                 console.log(`Received BUY for ${symbolName}:`, buyOrders);
+//                 console.log(`Received SELL for ${symbolName}:`, sellOrders);
+
+//                 // ✅ Validate orders data
+//                 if (!Array.isArray(buyOrders)) buyOrders = [];
+//                 if (!Array.isArray(sellOrders)) sellOrders = [];
+
+//                 // ✅ Sort orders
+//                 buyOrders = [...buyOrders].sort((a, b) => b.price - a.price); // descending
+//                 sellOrders = [...sellOrders].sort((a, b) => a.price - b.price); // ascending
+
+//                 // ✅ Slice to top 5 and format
+//                 const top5 = mergeBuySell(buyOrders.slice(0, 5), sellOrders.slice(0, 5));
+//                 console.log("Generated top5 order book:", top5);
+                
+//                 setOrderBook(top5);
+//                 setIsLoading(false); // ✅ Ensure loading is false after data update
+//               }
+//             });
+//           } catch (err) {
+//             console.error('Error processing STOMP message:', err);
+//             setError('Error processing market data');
+//             setIsLoading(false);
+//           }
+//         });
+//       },
+//       onStompError: (frame) => {
+//         console.error('STOMP error', frame);
+//         setError('STOMP connection error');
+//         setIsLoading(false);
+//       },
+//       onWebSocketError: (err) => {
+//         console.error('WebSocket error:', err);
+//         setError('WebSocket connection error');
+//         setIsLoading(false);
+//       },
+//       onDisconnect: () => {
+//         console.log('STOMP disconnected');
+//         setIsLoading(false);
+//       },
+//       reconnectDelay: 3000,
+//     });
+
+//     client.activate();
+//     wsRef.current = client;
+//   };
+
+//   function mergeBuySell(buyOrders, sellOrders) {
+//     console.log("Merging orders - Buy:", buyOrders, "Sell:", sellOrders);
+    
+//     const levels = [];
+//     for (let i = 0; i < 5; i++) {
+//       const level = {
+//         bidPrice: buyOrders[i]?.price || null,
+//         bidSize: buyOrders[i]?.qty || buyOrders[i]?.quantity || null,
+//         askPrice: sellOrders[i]?.price || null,
+//         askSize: sellOrders[i]?.qty || sellOrders[i]?.quantity || null,
+//       };
+//       levels.push(level);
+//       console.log(`Level ${i}:`, level);
+//     }
+    
+//     console.log("Final merged levels:", levels);
+//     return levels;
+//   }
+
+//   // ✅ Add debugging for render conditions
+//   console.log("Render state:", {
+//     selectedSymbol,
+//     isLoading,
+//     error,
+//     orderBookLength: orderBook.length,
+//     orderBook: orderBook
+//   });
+
+//   if (!selectedSymbol) {
+//     return (
+//       <div className="bg-[#121417] rounded-xl shadow-sm border border-gray-300 p-6 h-full">
+//         <h2 className="text-lg font-semibold text-white mb-4">Consolidated Order Book</h2>
+//         <div className="text-center py-8 text-gray-400">
+//           Select a symbol to view order book data
+//         </div>
+//       </div>
+//     );
+//   }
+
+//   if (error) {
+//     return (
+//       <div className="bg-[#121417] rounded-xl shadow-sm border border-gray-300 p-6">
+//         <h2 className="text-lg font-semibold text-white mb-4">
+//           Consolidated Order Book - {selectedSymbol}
+//         </h2>
+//         <div className="text-center py-8">
+//           <div className="text-red-400 mb-2">Error connecting to market data</div>
+//           <div className="text-gray-400 text-sm">{error}</div>
+//           <button
+//             onClick={() => {
+//               setError(null);
+//               connectWebSocket();
+//             }}
+//             className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+//           >
+//             Try Again
+//           </button>
+//         </div>
+//       </div>
+//     );
+//   }
+
+//   if (isLoading) {
+//     return (
+//       <div className="bg-[#121417] rounded-xl shadow-sm border border-gray-300 p-6">
+//         <h2 className="text-lg font-semibold text-white mb-4">
+//           Consolidated Order Book - {selectedSymbol}
+//         </h2>
+//         <div className="text-center py-8">
+//           <RefreshCw className="h-8 w-8 animate-spin text-blue-400 mx-auto mb-2" />
+//           <div className="text-gray-400">Loading order book...</div>
+//         </div>
+//       </div>
+//     );
+//   }
+
+//   return (
+//     <div className="bg-[#121417] rounded-xl shadow-sm border border-gray-300 p-6">
+//       <h2 className="text-lg font-semibold text-white mb-4">
+//         Consolidated Order Book - {selectedSymbol}
+//       </h2>
+      
+
+      
+//       <div className="overflow-x-auto rounded-xl">
+//         <table className="min-w-full divide-y divide-gray-800">
+//           <thead className="bg-[#1b1d21]">
+//             <tr>
+//               <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+//                 Level
+//               </th>
+//               <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+//                 Bid Price
+//               </th>
+//               <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+//                 Bid Size
+//               </th>
+//               <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+//                 Ask Price
+//               </th>
+//               <th className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+//                 Ask Size
+//               </th>
+//             </tr>
+//           </thead>
+//           <tbody className="divide-y divide-gray-800">
+//             {orderBook.map((level, index) => (
+//               <tr key={index} className={index % 2 === 0 ? 'bg-[#232529]' : 'bg-[#1b1d21]'}>
+//                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
+//                   {index + 1}
+//                 </td>
+//                 <td className="px-6 py-4 whitespace-nowrap text-sm text-green-400 font-mono">
+//                   {level.bidPrice ? `$${level.bidPrice.toFixed(2)}` : '-'}
+//                 </td>
+//                 <td className="px-6 py-4 whitespace-nowrap text-sm text-white font-mono">
+//                   {level.bidSize ? level.bidSize.toLocaleString() : '-'}
+//                 </td>
+//                 <td className="px-6 py-4 whitespace-nowrap text-sm text-red-400 font-mono">
+//                   {level.askPrice ? `$${level.askPrice.toFixed(2)}` : '-'}
+//                 </td>
+//                 <td className="px-6 py-4 whitespace-nowrap text-sm text-white font-mono">
+//                   {level.askSize ? level.askSize.toLocaleString() : '-'}
+//                 </td>
+//               </tr>
+//             ))}
+//           </tbody>
+//         </table>
+//       </div>
+      
+//       {orderBook.length === 0 && !isLoading && (
+//         <div className="text-center py-8 text-gray-400">
+//           No order book data available for {selectedSymbol}
+//         </div>
+//       )}
+//     </div>
+//   );
+// };
+
+// export default OrderBookTable;
+
+
+///===============================///
+
+
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { Client } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
-
-// const SYMBOL_PRICE_RANGES = {
-//   AAPL: [150.0, 200.0],
-//   GOOGL: [2000.0, 2500.0],
-//   MSFT: [200.0, 400.0],
-//   AMZN: [3000.0, 3500.0],
-//   TSLA: [200.0, 300.0],
-// };
 
 const OrderBookTable = ({ selectedSymbol }) => {
   const [orderBook, setOrderBook] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const wsRef = useRef(null);
-  const orderBookData = useRef({});
+  const currentSymbolRef = useRef(null);
 
-  useEffect(() => {
-    if (selectedSymbol) {
-      orderBookData.current = {};
-      setOrderBook([]);
-      setError(null);
-      connectWebSocket();
-    } else {
-      if (wsRef.current) {
-        wsRef.current.deactivate();
-      }
-      setOrderBook([]);
+  // Memoize the mergeBuySell function to prevent recreating it on every render
+  const mergeBuySell = useCallback((buyOrders, sellOrders) => {
+    console.log("Merging orders - Buy:", buyOrders, "Sell:", sellOrders);
+    
+    const levels = [];
+    for (let i = 0; i < 5; i++) {
+      const level = {
+        bidPrice: buyOrders[i]?.price || null,
+        bidSize: buyOrders[i]?.qty || buyOrders[i]?.quantity || null,
+        askPrice: sellOrders[i]?.price || null,
+        askSize: sellOrders[i]?.qty || sellOrders[i]?.quantity || null,
+      };
+      levels.push(level);
+      console.log(`Level ${i}:`, level);
     }
+    
+    console.log("Final merged levels:", levels);
+    return levels;
+  }, []);
 
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.deactivate();
-      }
-    };
-  }, [selectedSymbol]);
-
-  const connectWebSocket = () => {
+  // Memoize the WebSocket connection function
+  const connectWebSocket = useCallback(() => {
     if (wsRef.current) {
       wsRef.current.deactivate();
+    }
+
+    // Only proceed if we have a selected symbol
+    if (!selectedSymbol) {
+      return;
     }
 
     setIsLoading(true);
@@ -427,7 +703,7 @@ const OrderBookTable = ({ selectedSymbol }) => {
       debug: (msg) => console.log('[STOMP DEBUG]', msg),
       onConnect: () => {
         console.log('Connected to WebSocket via STOMP');
-        setIsLoading(false); // ✅ Set loading to false when connected
+        setIsLoading(false);
 
         client.subscribe('/topic/top5', (message) => {
           try {
@@ -443,33 +719,30 @@ const OrderBookTable = ({ selectedSymbol }) => {
             }
 
             symbolDataList.forEach((symbolData) => {
-              // ✅ Handle both string and object symbol formats
               const symbolName = typeof symbolData.symbol === 'string' 
                 ? symbolData.symbol 
                 : symbolData.symbol?.name;
-              console.log("Processing symbol:", symbolName, "Selected:", selectedSymbol);
               
-              if (symbolName === selectedSymbol) {
+              console.log("Processing symbol:", symbolName, "Selected:", currentSymbolRef.current);
+              
+              // Use the ref to get the current symbol to avoid stale closure
+              if (symbolName === currentSymbolRef.current) {
                 let buyOrders = symbolData.buy || [];
                 let sellOrders = symbolData.sell || [];
 
                 console.log(`Received BUY for ${symbolName}:`, buyOrders);
                 console.log(`Received SELL for ${symbolName}:`, sellOrders);
 
-                // ✅ Validate orders data
                 if (!Array.isArray(buyOrders)) buyOrders = [];
                 if (!Array.isArray(sellOrders)) sellOrders = [];
 
-                // ✅ Sort orders
-                buyOrders = [...buyOrders].sort((a, b) => b.price - a.price); // descending
-                sellOrders = [...sellOrders].sort((a, b) => a.price - b.price); // ascending
+                buyOrders = [...buyOrders].sort((a, b) => b.price - a.price);
+                sellOrders = [...sellOrders].sort((a, b) => a.price - b.price);
 
-                // ✅ Slice to top 5 and format
                 const top5 = mergeBuySell(buyOrders.slice(0, 5), sellOrders.slice(0, 5));
                 console.log("Generated top5 order book:", top5);
                 
                 setOrderBook(top5);
-                setIsLoading(false); // ✅ Ensure loading is false after data update
               }
             });
           } catch (err) {
@@ -498,28 +771,40 @@ const OrderBookTable = ({ selectedSymbol }) => {
 
     client.activate();
     wsRef.current = client;
-  };
+  }, [selectedSymbol, mergeBuySell]);
 
-  function mergeBuySell(buyOrders, sellOrders) {
-    console.log("Merging orders - Buy:", buyOrders, "Sell:", sellOrders);
-    
-    const levels = [];
-    for (let i = 0; i < 5; i++) {
-      const level = {
-        bidPrice: buyOrders[i]?.price || null,
-        bidSize: buyOrders[i]?.qty || buyOrders[i]?.quantity || null,
-        askPrice: sellOrders[i]?.price || null,
-        askSize: sellOrders[i]?.qty || sellOrders[i]?.quantity || null,
-      };
-      levels.push(level);
-      console.log(`Level ${i}:`, level);
+  // Update the current symbol ref whenever selectedSymbol changes
+  useEffect(() => {
+    currentSymbolRef.current = selectedSymbol;
+  }, [selectedSymbol]);
+
+  // Handle WebSocket connection when selectedSymbol changes
+  useEffect(() => {
+    if (selectedSymbol) {
+      setOrderBook([]);
+      setError(null);
+      connectWebSocket();
+    } else {
+      if (wsRef.current) {
+        wsRef.current.deactivate();
+      }
+      setOrderBook([]);
+      setIsLoading(false);
     }
-    
-    console.log("Final merged levels:", levels);
-    return levels;
-  }
 
-  // ✅ Add debugging for render conditions
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.deactivate();
+      }
+    };
+  }, [selectedSymbol, connectWebSocket]);
+
+  // Memoize the retry function
+  const handleRetry = useCallback(() => {
+    setError(null);
+    connectWebSocket();
+  }, [connectWebSocket]);
+
   console.log("Render state:", {
     selectedSymbol,
     isLoading,
@@ -549,10 +834,7 @@ const OrderBookTable = ({ selectedSymbol }) => {
           <div className="text-red-400 mb-2">Error connecting to market data</div>
           <div className="text-gray-400 text-sm">{error}</div>
           <button
-            onClick={() => {
-              setError(null);
-              connectWebSocket();
-            }}
+            onClick={handleRetry}
             className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
           >
             Try Again
@@ -581,8 +863,6 @@ const OrderBookTable = ({ selectedSymbol }) => {
       <h2 className="text-lg font-semibold text-white mb-4">
         Consolidated Order Book - {selectedSymbol}
       </h2>
-      
-
       
       <div className="overflow-x-auto rounded-xl">
         <table className="min-w-full divide-y divide-gray-800">
