@@ -426,7 +426,7 @@ const OrderBookTable = ({ selectedSymbol }) => {
         console.log('Connected to WebSocket via STOMP');
         setIsLoading(false); // ✅ Set loading to false when connected
 
-        client.subscribe('/topic/top5', (message) => {
+        client.subscribe('/topic/top', (message) => {
           try {
             console.log("Raw message body:", message.body);
             const msg = JSON.parse(message.body);
