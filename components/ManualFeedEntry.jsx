@@ -234,8 +234,8 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus } from 'lucide-react';
+import { Client } from '@stomp/stompjs';
 import SockJS from 'sockjs-client';
-import { Stomp } from '@stomp/stompjs';
 
 const ManualFeedEntry = ({ onSubmitFeed }) => {
   const [feedData, setFeedData] = useState({
@@ -246,72 +246,70 @@ const ManualFeedEntry = ({ onSubmitFeed }) => {
     orderType: 'Limit',
     orderValidity: 'Day'
   });
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [focusedField, setFocusedField] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
-  
   const stompClient = useRef(null);
 
-  // Essential fields for stock exchange order placement
   const SYMBOLS = ['AAPL', 'GOOGL', 'MSFT', 'AMZN', 'TSLA', 'META', 'NVDA'];
   const SIDES = ['BUY', 'SELL'];
   const ORDER_TYPES = ['Limit', 'Market', 'Stop', 'Stop Limit'];
   const ORDER_VALIDITY = ['Day', 'GTC', 'IOC', 'FOK'];
 
-  // Generate random values for backend fields
   const generateRandomOrderData = () => {
     const exchanges = ['NYSE', 'NASDAQ'];
-    const orderStatuses = ['New', 'Partially', 'Filled', 'Cancelled'];
-    
     return {
-      orderId: Math.floor(Math.random() * 1000000) + 100000, // Random 6-digit order ID
-      filledQty: 0, // Always start with 0 filled quantity
+      orderId: Math.floor(Math.random() * 1000000) + 100000,
+      filledQty: 0,
       remainingQty: parseInt(feedData.qty) || 0,
-      orderStatus: 'New', // Always start with 'New' status
+      orderStatus: 'New',
       timeStamp: new Date(),
       exchange: exchanges[Math.floor(Math.random() * exchanges.length)]
     };
   };
 
-  // Initialize WebSocket connection
   useEffect(() => {
     const connect = () => {
+      setConnectionStatus('connecting');
+
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
-      const sockJsUrl = `${backendUrl}/ws/careEcho`;
-      
-      const socket = new SockJS(sockJsUrl);
-      stompClient.current = Stomp.over(socket);
-      
-      stompClient.current.connect(
-        {},
-        (frame) => {
-          console.log('Connected: ' + frame);
+      const socketUrl = `${backendUrl}/ws/careEcho`;
+
+      const client = new Client({
+        brokerURL: undefined,
+        webSocketFactory: () => new SockJS(socketUrl),
+        reconnectDelay: 5000,
+        debug: (str) => console.log('[STOMP DEBUG]', str),
+        onConnect: () => {
+          console.log('✅ Connected to backend');
           setConnectionStatus('connected');
-          
-          // Subscribe to order responses
-          stompClient.current.subscribe('/topic/order', (message) => {
+
+          client.subscribe('/topic/order', (message) => {
             const orderResponse = JSON.parse(message.body);
-            console.log('Order response:', orderResponse);
+            console.log('📥 Order received from backend:', orderResponse);
           });
         },
-        (error) => {
-          console.error('WebSocket connection error:', error);
+        onStompError: (frame) => {
+          console.error('❌ STOMP error', frame);
           setConnectionStatus('error');
-          // Try to reconnect after 5 seconds
-          setTimeout(() => {
-            setConnectionStatus('reconnecting');
-            connect();
-          }, 5000);
+        },
+        onWebSocketClose: () => {
+          console.warn('⚠️ WebSocket closed. Reconnecting...');
+          setConnectionStatus('reconnecting');
+          setTimeout(() => connect(), 5000);
         }
-      );
+      });
+
+      stompClient.current = client;
+      client.activate();
     };
 
     connect();
 
-    // Cleanup on unmount
     return () => {
-      if (stompClient.current && stompClient.current.connected) {
-        stompClient.current.disconnect();
+      if (stompClient.current) {
+        stompClient.current.deactivate();
       }
     };
   }, []);
@@ -325,10 +323,7 @@ const ManualFeedEntry = ({ onSubmitFeed }) => {
 
     setIsSubmitting(true);
     try {
-      // Generate random data for backend fields
       const randomData = generateRandomOrderData();
-      
-      // Create complete order object
       const order = {
         orderId: randomData.orderId,
         symbol: feedData.symbol,
@@ -336,7 +331,7 @@ const ManualFeedEntry = ({ onSubmitFeed }) => {
         price: parseFloat(feedData.price),
         qty: parseInt(feedData.qty),
         filledQty: randomData.filledQty,
-        remainingQty: parseInt(feedData.qty), // Initially all quantity is remaining
+        remainingQty: parseInt(feedData.qty),
         orderType: feedData.orderType,
         orderStatus: randomData.orderStatus,
         orderValidity: feedData.orderValidity,
@@ -344,19 +339,17 @@ const ManualFeedEntry = ({ onSubmitFeed }) => {
         exchange: randomData.exchange
       };
 
-      // Send order to backend via WebSocket
-      stompClient.current.send('/app/order', {}, JSON.stringify(order));
-      
-      // Call the original onSubmitFeed if provided
-      
+      stompClient.current.publish({
+        destination: '/app/order',
+        body: JSON.stringify(order),
+      });
+
       if (onSubmitFeed) {
         await onSubmitFeed(order);
       }
 
-      // Show success message with generated order ID
       alert(`Order submitted successfully! Order ID: ${randomData.orderId}`);
 
-      // Reset form
       setFeedData({
         symbol: 'AAPL',
         side: 'BUY',
@@ -375,7 +368,7 @@ const ManualFeedEntry = ({ onSubmitFeed }) => {
     }
   };
 
-  const isFormValid = feedData.symbol && feedData.price && feedData.qty;
+  const isFormValid = feedData.symbol && (feedData.price || feedData.orderType === 'Market') && feedData.qty;
 
   const getConnectionStatusColor = () => {
     switch (connectionStatus) {
@@ -395,7 +388,6 @@ const ManualFeedEntry = ({ onSubmitFeed }) => {
       default: return 'Disconnected';
     }
   };
-
   return (
     <div className="bg-[#1b1d21] rounded-xl border border-gray-700 shadow-2xl backdrop-blur-sm max-w-4xl mx-auto">
       {/* Header Section */}

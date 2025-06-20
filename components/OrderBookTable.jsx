@@ -421,12 +421,15 @@ const OrderBookTable = ({ selectedSymbol }) => {
     const socketUrl = process.env.NEXT_PUBLIC_BACKEND_URL + "/ws/careEcho";
 
     const client = new Client({
+      brokerURL: undefined,
       webSocketFactory: () => new SockJS(socketUrl),
+      reconnectDelay: 5000,
+      debug: (msg) => console.log('[STOMP DEBUG]', msg),
       onConnect: () => {
         console.log('Connected to WebSocket via STOMP');
         setIsLoading(false); // ✅ Set loading to false when connected
 
-        client.subscribe('/topic/top', (message) => {
+        client.subscribe('/topic/top5', (message) => {
           try {
             console.log("Raw message body:", message.body);
             const msg = JSON.parse(message.body);

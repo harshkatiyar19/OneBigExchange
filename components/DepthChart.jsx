@@ -425,90 +425,84 @@ const DepthCharts = () => {
     };
 
     // SockJS/STOMP connection logic
-    const connectWebSocket = () => {
-        try {
-            const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8082';
-            const sockJsUrl = `${backendUrl}/ws/careEcho`;
-            
-            // Create SockJS connection
-            const socket = new SockJS(sockJsUrl);
-            const stompClient = Stomp.over(socket);
-            
-            // Disable debug logging in production
-            if (process.env.NODE_ENV === 'production') {
-                stompClient.debug = null;
+    const stompClientRef = useRef(null);
+
+
+const connectWebSocket = () => {
+  try {
+    const socketUrl = process.env.NEXT_PUBLIC_BACKEND_URL + "/ws/careEcho";
+
+    const client = new Client({
+      brokerURL: undefined,
+      webSocketFactory: () => new SockJS(socketUrl),
+      reconnectDelay: 5000,
+      debug: (msg) => console.log('[STOMP DEBUG]', msg),
+
+      onConnect: () => {
+        console.log('✅ Connected to WebSocket via STOMP');
+        setIsLoading(false);
+        setConnectionStatus('Connected');
+
+        client.subscribe('/topic/orders', (message) => {
+          try {
+            const orderData = JSON.parse(message.body);
+            console.log('📦 Received order data:', orderData);
+
+            if (orderData && orderData.data && Array.isArray(orderData.data)) {
+              const newOrderBooks = {};
+
+              orderData.data.forEach(symbolData => {
+                const symbolName = typeof symbolData.symbol === 'string'
+                  ? symbolData.symbol
+                  : symbolData.symbol.toString();
+
+                const transformed = transformOrderBookData(symbolData);
+                if (transformed.bids.length || transformed.asks.length) {
+                  newOrderBooks[symbolName] = transformed;
+                }
+              });
+
+              if (Object.keys(newOrderBooks).length > 0) {
+                setOrderBooks(prev => ({
+                  ...prev,
+                  ...newOrderBooks
+                }));
+              }
             }
 
-            stompClient.connect({}, (frame) => {
-                console.log('Connected: ' + frame);
-                setConnectionStatus('Connected');
-                setError(null);
-                wsRef.current = stompClient;
-                
-                // Subscribe to the orders topic
-                stompClient.subscribe('/topic/orders', (message) => {
-                    try {
-                        const orderData = JSON.parse(message.body);
-                        console.log('Received order data:', orderData);
-                        
-                        // Process the OrderData(List<SymbolData2> data) structure
-                        if (orderData && orderData.data && Array.isArray(orderData.data)) {
-                            const newOrderBooks = {};
-                            
-                            orderData.data.forEach(symbolData => {
-                                if (symbolData.symbol) {
-                                    // Handle both string and enum symbol types
-                                    const symbolName = typeof symbolData.symbol === 'string' 
-                                        ? symbolData.symbol 
-                                        : symbolData.symbol.toString();
-                                    
-                                    const transformedData = transformOrderBookData(symbolData);
-                                    
-                                    // Only update if we have meaningful data
-                                    if (transformedData.bids.length > 0 || transformedData.asks.length > 0) {
-                                        newOrderBooks[symbolName] = transformedData;
-                                    }
-                                }
-                            });
-                            
-                            // Only update state if we have new data
-                            if (Object.keys(newOrderBooks).length > 0) {
-                                setOrderBooks(prevOrderBooks => ({
-                                    ...prevOrderBooks,
-                                    ...newOrderBooks
-                                }));
-                            }
-                        }
-                    } catch (err) {
-                        console.error('Error parsing STOMP message:', err);
-                        setError('Error parsing data from server');
-                    }
-                });
-            }, (error) => {
-                console.error('STOMP connection error:', error);
-                setConnectionStatus('Error');
-                setError('Failed to connect to server');
-                
-                // Attempt to reconnect after 3 seconds
-                reconnectTimeoutRef.current = setTimeout(() => {
-                    console.log('Attempting to reconnect...');
-                    connectWebSocket();
-                }, 3000);
-            });
+          } catch (err) {
+            console.error('❌ Error parsing STOMP message:', err);
+            setError('Error parsing data from server');
+          }
+        });
+      },
 
-            
-            // Handle disconnection
-            socket.onclose = () => {
-                console.log('SockJS connection closed');
-                setConnectionStatus('Disconnected');
-            };
+      onStompError: (frame) => {
+        console.error('❌ STOMP error:', frame);
+        setConnectionStatus('Error');
+        setError('STOMP protocol error from server.');
+      },
 
-        } catch (err) {
-            console.error('Failed to create WebSocket connection:', err);
-            setError('Failed to connect to server');
-            setConnectionStatus('Error');
-        }
-    };
+      onWebSocketClose: () => {
+        console.warn('⚠️ WebSocket connection closed');
+        setConnectionStatus('Disconnected');
+
+        reconnectTimeoutRef.current = setTimeout(() => {
+          console.log('🔁 Attempting reconnection...');
+          connectWebSocket();
+        }, 3000);
+      }
+    });
+
+    stompClientRef.current = client;
+    client.activate(); // ✅ start the connection
+  } catch (err) {
+    console.error('❌ Failed to connect WebSocket:', err);
+    setError('WebSocket connection failed');
+    setConnectionStatus('Error');
+  }
+};
+
 
     useEffect(() => {
         connectWebSocket();
